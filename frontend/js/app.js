@@ -344,6 +344,35 @@ document.getElementById('btn-submit-phase').onclick = () => {
   AppState.selectedCardIds = [];
 };
 
+document.getElementById('btn-play-all').onclick = () => {
+  const state = AppState.gameState;
+  const me = state?.players.find(p => p.name === AppState.playerName);
+  if (!me) return;
+  const phaseDef = state.phase_definitions[me.phase_number - 1];
+  const playedCount = me.played_groups ? me.played_groups.length : 0;
+
+  for (let i = 0; i < AppState.phaseGroups.length; i++) {
+    const required = phaseDef.groups[playedCount + i].count;
+    if ((AppState.phaseGroups[i] || []).length !== required) {
+      showError(`Fill all groups first (Group ${playedCount + i + 1} needs ${required} cards)`);
+      return;
+    }
+  }
+
+  const groups = AppState.phaseGroups.map(g => [...g]);
+  AppState.phaseGroups = [];
+  AppState.activePhaseSlot = null;
+  AppState.selectedCardIds = [];
+
+  if (playedCount === 0) {
+    send({ type: 'play_phase', payload: { groups } });
+  } else {
+    for (const group of groups) {
+      send({ type: 'play_group', payload: { group } });
+    }
+  }
+};
+
 // Called when a card is dragged to a slot (groupIndex = slot index in remaining groups),
 // when a card is clicked with an active slot, or when an assigned card is clicked (no groupIndex → removes).
 window.handlePhaseCardClick = function(cardId, groupIndex) {
@@ -538,22 +567,31 @@ document.getElementById('discard-top-card').addEventListener('click', () => {
 
 // ── Theme toggle ──────────────────────────────────────────────────────────
 (function initTheme() {
-  const saved = localStorage.getItem('amTheme');
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
+  const themes = [
+    { key: 'light', label: '☀️ Light' },
+    { key: 'slate', label: '⚡ Slate' },
+    { key: 'dark',  label: '🌙 Dark'  },
+  ];
+  const setTheme = key => {
+    if (key === 'dark' || key === 'slate') document.documentElement.setAttribute('data-theme', key);
+    else document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('amTheme', key);
+  };
+  setTheme(localStorage.getItem('amTheme') || 'slate');
+
   const btn = document.getElementById('theme-toggle');
   const updateLabel = () => {
-    btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙';
+    const cur = localStorage.getItem('amTheme') || 'slate';
+    const curTheme = themes.find(t => t.key === cur) || themes[1];
+    btn.textContent = curTheme.label;
+    btn.title = 'Switch theme';
   };
   updateLabel();
   btn.onclick = () => {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    if (isDark) {
-      document.documentElement.removeAttribute('data-theme');
-      localStorage.removeItem('amTheme');
-    } else {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('amTheme', 'dark');
-    }
+    const cur = localStorage.getItem('amTheme') || 'slate';
+    const idx = themes.findIndex(t => t.key === cur);
+    const next = themes[(idx === -1 ? 1 : idx + 1) % themes.length];
+    setTheme(next.key);
     updateLabel();
   };
 })();

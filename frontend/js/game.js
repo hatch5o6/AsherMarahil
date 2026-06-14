@@ -1,4 +1,5 @@
 // ── Game rendering — all pure display, no state mutation ──────────────────
+let _lastDiscardTopId = null;
 
 function renderGame(state) {
   renderScoreboard(state);
@@ -43,11 +44,22 @@ function renderPiles(state) {
   document.getElementById('draw-count').textContent = `${state.draw_pile_count} cards`;
 
   const discardEl = document.getElementById('discard-top-card');
-  discardEl.className = 'card';
+  const newTopId = state.discard_top?.id ?? null;
+  const animateIn = newTopId !== null && newTopId !== _lastDiscardTopId;
+  _lastDiscardTopId = newTopId;
+
+  discardEl.className = 'card card-pile';
   discardEl.innerHTML = '';
 
   if (state.discard_top) {
     applyCardStyle(discardEl, state.discard_top);
+    if (animateIn) {
+      void discardEl.offsetWidth;  // force reflow so animation restarts
+      discardEl.classList.add('card-discard-enter');
+      discardEl.addEventListener('animationend', () => {
+        discardEl.classList.remove('card-discard-enter');
+      }, { once: true });
+    }
   } else {
     discardEl.classList.add('card-back');
   }
@@ -84,79 +96,27 @@ function renderPhasePanel(state) {
 }
 
 // ── Your own played phase groups ───────────────────────────────────────────
-function renderYourPlayedPhase(state) {
-  const el = document.getElementById('your-played-phase');
-  const me = state.players.find(p => p.name === AppState.playerName);
-  if (!me || !me.played_groups || me.played_groups.length === 0) {
-    el.style.display = 'none';
-    el.innerHTML = '';
-    return;
-  }
-
-  el.style.display = 'flex';
-  el.innerHTML = '';
-
-  const phaseDef = state.phase_definitions[me.phase_number - 1];
-  const playedCount = me.played_groups.length;
-  const totalGroups = phaseDef.groups.length;
-  const statusLabel = playedCount >= totalGroups ? 'complete' : `${playedCount}/${totalGroups} groups`;
-
-  const header = document.createElement('div');
-  header.className = 'ypg-header';
-  header.textContent = `Your Phase ${me.phase_number} — ${statusLabel}`;
-  el.appendChild(header);
-
-  const groupsRow = document.createElement('div');
-  groupsRow.className = 'ypg-groups';
-
-  me.played_groups.forEach((group, gi) => {
-    const groupEl = document.createElement('div');
-    groupEl.className = 'played-phase-group ypg-group';
-
-    if (AppState.layOffMode) {
-      groupEl.classList.add('lay-off-target');
-      groupEl.onclick = () => window.handleLayOffTargetClick(AppState.playerName, gi);
-    }
-    if (AppState.layOffTarget?.playerName === AppState.playerName && AppState.layOffTarget?.groupIndex === gi) {
-      groupEl.classList.add('lay-off-selected');
-    }
-
-    groupEl.addEventListener('dragover', e => { e.preventDefault(); groupEl.classList.add('drag-over'); });
-    groupEl.addEventListener('dragleave', () => groupEl.classList.remove('drag-over'));
-    groupEl.addEventListener('drop', e => {
-      e.preventDefault();
-      groupEl.classList.remove('drag-over');
-      const cardId = parseInt(e.dataTransfer.getData('cardId'));
-      if (!isNaN(cardId)) {
-        send({ type: 'lay_off', payload: { target_player: AppState.playerName, group_index: gi, card_ids: [cardId] } });
-      }
-    });
-
-    group.forEach(c => groupEl.appendChild(buildCardElement(c, false, false, 'card-mini')));
-    groupsRow.appendChild(groupEl);
-  });
-
-  el.appendChild(groupsRow);
+function renderYourPlayedPhase() {
+  document.getElementById('your-played-phase').style.display = 'none';
 }
 
-// ── Opponents panel — hands + inline played phases ─────────────────────────
+// ── Players panel — all players including self ─────────────────────────────
 function renderPlayersPanel(state) {
   const el = document.getElementById('players-panel');
   el.innerHTML = '';
 
   state.players.forEach((p, i) => {
-    if (p.name === AppState.playerName) return;
-
+    const isMe = p.name === AppState.playerName;
     const isActive = i === state.current_player_index && state.status === 'playing';
     const card = document.createElement('div');
-    card.className = `player-panel-card${isActive ? ' active-turn' : ''}`;
+    card.className = `player-panel-card${isActive ? ' active-turn' : ''}${isMe ? ' ppc-you' : ''}`;
 
     // Header
     const header = document.createElement('div');
     header.className = 'ppc-header';
     const nameSpan = document.createElement('span');
     nameSpan.className = 'ppc-name';
-    nameSpan.textContent = p.name + (p.is_skipped ? ' ⏭' : '');
+    nameSpan.textContent = (isMe ? 'You' : p.name) + (p.is_skipped ? ' ⏭' : '');
     const metaSpan = document.createElement('span');
     metaSpan.className = 'ppc-meta';
     metaSpan.textContent = `Phase ${p.phase_number} · ${p.score} pts · ${p.hand.length} cards`;
@@ -176,25 +136,27 @@ function renderPlayersPanel(state) {
       card.appendChild(skipRow);
     }
 
-    // Face-down hand
-    const handRow = document.createElement('div');
-    handRow.className = 'ppc-hand';
-    const show = Math.min(p.hand.length, 13);
-    for (let j = 0; j < show; j++) {
-      const c = document.createElement('div');
-      c.className = 'card card-back card-mini';
-      handRow.appendChild(c);
+    // Face-down hand (skip for self — hand is shown in the hand panel below)
+    if (!isMe) {
+      const handRow = document.createElement('div');
+      handRow.className = 'ppc-hand';
+      const show = Math.min(p.hand.length, 13);
+      for (let j = 0; j < show; j++) {
+        const c = document.createElement('div');
+        c.className = 'card card-back card-mini';
+        handRow.appendChild(c);
+      }
+      if (p.hand.length > show) {
+        const more = document.createElement('span');
+        more.className = 'ppc-more';
+        more.textContent = `+${p.hand.length - show}`;
+        handRow.appendChild(more);
+      }
+      card.appendChild(handRow);
     }
-    if (p.hand.length > show) {
-      const more = document.createElement('span');
-      more.className = 'ppc-more';
-      more.textContent = `+${p.hand.length - show}`;
-      handRow.appendChild(more);
-    }
-    card.appendChild(handRow);
 
-    // Played phase groups with lay-off targets
-    if (p.played_groups) {
+    // Played phase groups with lay-off targets (own and opponents)
+    if (p.played_groups && p.played_groups.length > 0) {
       const phaseRow = document.createElement('div');
       phaseRow.className = 'ppc-phase-groups';
 
@@ -232,68 +194,100 @@ function renderPlayersPanel(state) {
       card.appendChild(phaseRow);
     }
 
-    el.appendChild(card);
+    if (isMe) el.prepend(card);
+    else el.appendChild(card);
   });
 }
 
-// ── Your Hand ──────────────────────────────────────────────────────────────
+// ── Your Hand (fanned layout) ──────────────────────────────────────────────
 function renderYourHand(state) {
   const handEl = document.getElementById('your-hand');
   handEl.innerHTML = '';
 
   const me = state.players.find(p => p.name === AppState.playerName);
-  if (!me) return;
+  if (!me) {
+    updateHandHint();
+    return;
+  }
 
   const isMyTurn = state.players[state.current_player_index]?.name === AppState.playerName
                    && state.status === 'playing';
 
-  // Sort hand: number cards by color then number, then wilds, then skips
   const sorted = [...me.hand].sort(sortCards);
+  const N = sorted.length;
 
-  sorted.forEach(card => {
-    const inPhaseGroup = AppState.phaseGroups.some(g => g.includes(card.id));
-    const isSelected = AppState.selectedCardIds.includes(card.id) || inPhaseGroup;
+  if (N > 0) {
+    const cardW = 62;
+    const containerW = handEl.offsetWidth || handEl.parentElement?.offsetWidth || 700;
+    const spread = Math.min(40, N * 4);
+    const maxOverlap = 46;
+    const rawTotalW = (N - 1) * maxOverlap + cardW;
+    const overlapPx = rawTotalW > containerW * 0.92
+      ? Math.max(18, (containerW * 0.92 - cardW) / Math.max(N - 1, 1))
+      : maxOverlap;
+    const totalW = (N - 1) * overlapPx + cardW;
+    const startX = (containerW - totalW) / 2;
 
-    const cardEl = buildCardElement(card, isSelected, false, '');
-    if (card.id === AppState.lastDrawnCardId) {
-      cardEl.classList.add('card-newly-drawn');
-    }
+    sorted.forEach((card, i) => {
+      const inPhaseGroup = AppState.phaseGroups.some(g => g.includes(card.id));
+      const isSelected = AppState.selectedCardIds.includes(card.id) || inPhaseGroup;
+      const t = N > 1 ? i / (N - 1) - 0.5 : 0;
+      const angle = t * spread;
+      const baseZ = i;
+      const raisedZ = N + 5;
 
-    if (isMyTurn) {
-      cardEl.classList.add('clickable');
-      cardEl.setAttribute('draggable', 'true');
-      cardEl.addEventListener('dragstart', e => {
-        e.dataTransfer.setData('cardId', String(card.id));
-        e.dataTransfer.effectAllowed = 'move';
-        cardEl.classList.add('dragging');
-      });
-      cardEl.addEventListener('dragend', () => cardEl.classList.remove('dragging'));
-      cardEl.onclick = () => {
-        // Assigned card: clicking removes it from its group
-        if (inPhaseGroup) {
-          window.handlePhaseCardClick(card.id);
-          return;
-        }
-        // Active slot: clicking assigns card to the slot
-        if (AppState.activePhaseSlot !== null) {
-          window.handlePhaseCardClick(card.id);
-          return;
-        }
-        // Toggle selection (for phase slot assignment or discard)
-        if (AppState.selectedCardIds.includes(card.id)) {
-          AppState.selectedCardIds = AppState.selectedCardIds.filter(id => id !== card.id);
-        } else {
-          AppState.selectedCardIds.push(card.id);
-        }
-        renderGame(state);
-      };
-    }
+      const wrapper = document.createElement('div');
+      wrapper.className = 'hand-card-wrapper';
+      wrapper.style.left = `${startX + i * overlapPx}px`;
+      wrapper.style.transform = `rotate(${angle.toFixed(2)}deg)`;
+      wrapper.style.zIndex = isSelected ? raisedZ : baseZ;
 
-    handEl.appendChild(cardEl);
-  });
+      const cardEl = buildCardElement(card, isSelected, false, '');
+      if (card.id === AppState.lastDrawnCardId) cardEl.classList.add('card-newly-drawn');
 
-  // Update selection hint
+      if (isMyTurn) {
+        cardEl.classList.add('clickable');
+        cardEl.setAttribute('draggable', 'true');
+
+        cardEl.addEventListener('dragstart', e => {
+          e.dataTransfer.setData('cardId', String(card.id));
+          e.dataTransfer.effectAllowed = 'move';
+          cardEl.classList.add('dragging');
+          wrapper.style.zIndex = N + 20;
+        });
+        cardEl.addEventListener('dragend', () => {
+          cardEl.classList.remove('dragging');
+          wrapper.style.zIndex = isSelected ? raisedZ : baseZ;
+        });
+
+        wrapper.addEventListener('mouseenter', () => { wrapper.style.zIndex = N + 15; });
+        wrapper.addEventListener('mouseleave', () => {
+          wrapper.style.zIndex = isSelected ? raisedZ : baseZ;
+        });
+
+        cardEl.onclick = () => {
+          if (inPhaseGroup) { window.handlePhaseCardClick(card.id); return; }
+          if (AppState.activePhaseSlot !== null) { window.handlePhaseCardClick(card.id); return; }
+          if (AppState.selectedCardIds.includes(card.id)) {
+            AppState.selectedCardIds = AppState.selectedCardIds.filter(id => id !== card.id);
+          } else {
+            AppState.selectedCardIds.push(card.id);
+          }
+          renderGame(state);
+        };
+      }
+
+      wrapper.appendChild(cardEl);
+      handEl.appendChild(wrapper);
+    });
+  }
+
+  updateHandHint();
+}
+
+function updateHandHint() {
   const hint = document.getElementById('hand-selection-hint');
+  if (!hint) return;
   const totalAssigned = AppState.phaseGroups.reduce((n, g) => n + g.length, 0);
   if (totalAssigned > 0 || AppState.selectedCardIds.length > 0) {
     const sel = AppState.selectedCardIds.length;
@@ -302,7 +296,7 @@ function renderYourHand(state) {
       : `${totalAssigned} card${totalAssigned > 1 ? 's' : ''} assigned to phase groups`;
     hint.style.color = 'var(--accent)';
   } else if (AppState.layOffMode && AppState.layOffTarget) {
-    hint.textContent = `${AppState.selectedCardIds.length} card(s) selected — click "Lay Off" to confirm`;
+    hint.textContent = 'Target selected — pick cards then click Lay Off';
     hint.style.color = '#a78bfa';
   } else {
     hint.textContent = AppState.selectedCardIds.length > 0

@@ -41,6 +41,7 @@ class Game:
             raise GameActionError("Game already started")
         if len(self.state.players) < 2:
             raise GameActionError("Need at least 2 players to start")
+        random.shuffle(self.state.players)
         self._new_round()
 
     # ── Round management ──────────────────────────────────────────────────────

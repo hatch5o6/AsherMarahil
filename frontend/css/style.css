@@ -2,17 +2,19 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #f5f3ff;
+  --bg:        #ede9ff;
   --bg2:       #ffffff;
-  --bg3:       #ddd6fe;
+  --bg3:       #b8a8f8;
   --text:      #1e1b4b;
-  --muted:     #6b7280;
-  --accent:    #d97706;
-  --danger:    #dc2626;
-  --success:   #16a34a;
+  --muted:     #6060a0;
+  --accent:    #f59e0b;
+  --danger:    #ef4444;
+  --success:   #22c55e;
   --card-w:    62px;
   --card-h:    92px;
   --radius:    10px;
+  --body-bg:   linear-gradient(160deg, #ede9ff 0%, #ddeaff 100%);
+  --screen-bg: radial-gradient(ellipse at 50% 0%, #c4b5fd 0%, #f5f3ff 70%);
 }
 
 [data-theme="dark"] {
@@ -24,11 +26,13 @@
   --accent:    #f59e0b;
   --danger:    #ef4444;
   --success:   #22c55e;
+  --body-bg:   #0f172a;
+  --screen-bg: radial-gradient(ellipse at 50% 0%, #1e3a5f 0%, #0f172a 70%);
 }
 
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg);
+  background: var(--body-bg);
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
@@ -42,10 +46,7 @@ body {
 #lobby-screen {
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 0%, #c4b5fd 0%, #f5f3ff 70%);
-}
-[data-theme="dark"] #lobby-screen {
-  background: radial-gradient(ellipse at 50% 0%, #1e3a5f 0%, #0f172a 70%);
+  background: var(--screen-bg);
 }
 
 .lobby-card {
@@ -109,10 +110,7 @@ body {
 #waiting-screen {
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 0%, #c4b5fd 0%, #f5f3ff 70%);
-}
-[data-theme="dark"] #waiting-screen {
-  background: radial-gradient(ellipse at 50% 0%, #1e3a5f 0%, #0f172a 70%);
+  background: var(--screen-bg);
 }
 
 .waiting-card {
@@ -353,20 +351,36 @@ body {
 }
 
 .card-pile {
-  width: 90px;
-  height: 130px;
+  width: 110px;
+  height: 160px;
   border-radius: 10px;
   cursor: default;
+  box-shadow:
+    4px 4px 0 1px #4a40c8,
+    8px 8px 0 2px #3c34a8,
+    0 14px 32px rgba(79,70,229,0.22);
+}
+[data-theme="dark"] .card-pile {
+  box-shadow:
+    4px 4px 0 1px #142855,
+    8px 8px 0 2px #0e1e40,
+    0 14px 32px rgba(0,0,0,0.45);
+}
+[data-theme="slate"] .card-pile {
+  box-shadow:
+    4px 4px 0 1px #1a3a60,
+    8px 8px 0 2px #112a48,
+    0 14px 32px rgba(0,0,0,0.5);
 }
 #discard-top-card { cursor: pointer; }
-.card-pile.card-back::after { font-size: 2.4rem; }
-.card-pile .card-corner { font-size: 0.85rem; }
-.card-pile .card-center-num { font-size: 2.8rem; }
+.card-pile.card-back::after { font-size: 2.6rem; }
+.card-pile .card-corner { font-size: 0.9rem; }
+.card-pile .card-center-num { font-size: 3.2rem; }
 .card-pile .card-wild-star,
-.card-pile .card-skip-icon { font-size: 2.2rem; }
+.card-pile .card-skip-icon { font-size: 2.6rem; }
 .card-pile .card-wild-label,
-.card-pile .card-skip-label { font-size: 0.65rem; }
-.card-pile::before { inset: 5px; }
+.card-pile .card-skip-label { font-size: 0.7rem; }
+.card-pile::before { inset: 6px; }
 
 #players-panel {
   display: grid;
@@ -386,6 +400,7 @@ body {
   transition: border-color 0.2s;
 }
 .player-panel-card.active-turn { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(245,158,11,0.2); }
+.player-panel-card.ppc-you { border-color: rgba(34,197,94,0.5); background: rgba(34,197,94,0.04); }
 
 .ppc-header { display: flex; justify-content: space-between; align-items: baseline; }
 .ppc-name { font-weight: 700; font-size: 0.95rem; }
@@ -421,8 +436,11 @@ body {
 #hand-panel {
   background: var(--bg2);
   border-top: 1px solid var(--bg3);
-  padding: 10px 14px;
+  padding: 10px 14px 22px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+  overflow: visible;
 }
 
 #hand-header {
@@ -435,10 +453,18 @@ body {
 #hand-selection-hint { font-size: 0.8rem; }
 
 #your-hand {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: calc(var(--card-h) + 16px);
+  position: relative;
+  width: 100%;
+  min-height: 160px;
+  overflow: visible;
+}
+
+/* Wrapper for each fanned card */
+.hand-card-wrapper {
+  position: absolute;
+  bottom: 10px;
+  transform-origin: bottom center;
+  transition: none;
 }
 
 /* ── Cards ────────────────────────────────────────────────────────────────── */
@@ -469,13 +495,42 @@ body {
 }
 
 /* Light vibrant (default) card colors */
-.card-back   { background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%); }
-.card-red    { background: linear-gradient(135deg, #ff3b30 0%, #c0001a 100%); }
-.card-blue   { background: linear-gradient(135deg, #007aff 0%, #0047ab 100%); }
-.card-green  { background: linear-gradient(135deg, #28cd41 0%, #148a00 100%); }
-.card-yellow { background: linear-gradient(135deg, #ffd60a 0%, #ff9500 100%); color: #4a2800; }
-.card-wild   { background: linear-gradient(135deg, #bf5af2 0%, #6c0fa8 100%); }
-.card-skip   { background: linear-gradient(135deg, #636366 0%, #3a3a3c 100%); }
+.card-back   { background: linear-gradient(135deg, #5b52f0 0%, #3a32c8 100%); }
+.card-red    { background: linear-gradient(135deg, #ff2020 0%, #aa0000 100%); }
+.card-blue   { background: linear-gradient(135deg, #0088ff 0%, #0040c0 100%); }
+.card-green  { background: linear-gradient(135deg, #00d84c 0%, #007a28 100%); }
+.card-yellow { background: linear-gradient(135deg, #ffe000 0%, #ff8800 100%); color: #4a2800; }
+.card-wild   { background: linear-gradient(135deg, #cc44ff 0%, #7700cc 100%); }
+.card-skip   { background: linear-gradient(135deg, #8890b8 0%, #4a5580 100%); }
+
+/* ── Slate theme (bold dark, game-UI feel) ─────────────────────────────────── */
+[data-theme="slate"] {
+  --bg:        #111d2c;
+  --bg2:       #1a2d42;
+  --bg3:       #2c4560;
+  --text:      #d8eaf8;
+  --muted:     #7090b8;
+  --accent:    #f97316;
+  --danger:    #ef4444;
+  --success:   #22c55e;
+  --body-bg:   linear-gradient(160deg, #111d2c 0%, #0e1f30 100%);
+  --screen-bg: radial-gradient(ellipse at 50% 0%, #1e4878 0%, #0a1525 70%);
+}
+[data-theme="slate"] .lobby-card,
+[data-theme="slate"] .waiting-card { box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+[data-theme="slate"] .modal-box    { box-shadow: 0 20px 60px rgba(0,0,0,0.7); }
+[data-theme="slate"] .card         { box-shadow: 2px 3px 8px rgba(0,0,0,0.5); }
+[data-theme="slate"] .card-back  { background: linear-gradient(135deg, #1e4a80 0%, #0d2850 100%); }
+[data-theme="slate"] .card-red   { background: linear-gradient(135deg, #ff3020 0%, #cc0000 100%); }
+[data-theme="slate"] .card-blue  { background: linear-gradient(135deg, #00aaff 0%, #0060d0 100%); }
+[data-theme="slate"] .card-green { background: linear-gradient(135deg, #00e040 0%, #008820 100%); }
+[data-theme="slate"] .card-yellow { background: linear-gradient(135deg, #ffd000 0%, #ff7700 100%); color: #3a1800; }
+[data-theme="slate"] .card-wild  { background: linear-gradient(135deg, #cc00ff 0%, #7700cc 100%); }
+[data-theme="slate"] .card-skip  { background: linear-gradient(135deg, #7090a8 0%, #405068 100%); }
+[data-theme="slate"] .card-yellow .card-corner,
+[data-theme="slate"] .card-yellow .card-center-num { color: #3a1800; }
+[data-theme="slate"] .score-card.active-turn { box-shadow: 0 0 0 2px rgba(249,115,22,0.4); }
+[data-theme="slate"] .player-panel-card.active-turn { box-shadow: 0 0 0 2px rgba(249,115,22,0.3); }
 
 /* Dark theme card color overrides */
 [data-theme="dark"] .card-back  { background: linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%); }
@@ -574,6 +629,16 @@ body {
 /* Drag and drop */
 .card.dragging { opacity: 0.4; transform: scale(0.95); }
 .drag-over { outline: 2px dashed var(--accent) !important; outline-offset: 3px; background: rgba(245,158,11,0.06) !important; }
+
+/* Discard animation — card lands on pile */
+@keyframes card-discard-enter {
+  0%   { transform: translateY(-55px) rotate(-14deg) scale(0.78); opacity: 0; }
+  55%  { transform: translateY(5px) rotate(1.5deg) scale(1.05); opacity: 1; }
+  100% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+}
+.card-discard-enter {
+  animation: card-discard-enter 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
 /* Newly drawn card highlight */
 @keyframes card-draw-enter {
